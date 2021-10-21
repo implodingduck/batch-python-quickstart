@@ -149,6 +149,11 @@ def create_pool(batch_service_client, pool_id):
     # Marketplace image. For more information about creating pools of Linux
     # nodes, see:
     # https://azure.microsoft.com/documentation/articles/batch-linux-nodes/
+    user_id = batchmodels.UserIdentity(
+        auto_user=batchmodels.AutoUserSpecification(
+            elevation_level="admin"))
+    start_task_command = "/bin/bash -c \"sudo apt-get -y update && sudo apt-get install -y python3\""
+    start_task = batchmodels.StartTask(command_line=start_task_command, wait_for_success=True, user_identity=user_id)
     new_pool = batchmodels.PoolAddParameter(
         id=pool_id,
         virtual_machine_configuration=batchmodels.VirtualMachineConfiguration(
@@ -160,9 +165,13 @@ def create_pool(batch_service_client, pool_id):
             ),
             node_agent_sku_id="batch.node.ubuntu 20.04"),
         vm_size=config._POOL_VM_SIZE,
-        target_dedicated_nodes=config._POOL_NODE_COUNT
+        target_dedicated_nodes=config._POOL_NODE_COUNT,
+        start_task=start_task
     )
-    batch_service_client.pool.add(new_pool)
+    try:
+        batch_service_client.pool.add(new_pool)
+    except batchmodels.BatchErrorException  as e:
+        print(e.message)
 
 
 def create_job(batch_service_client, job_id, pool_id):
@@ -202,7 +211,8 @@ def add_tasks(batch_service_client, job_id, input_files):
 
     for idx, input_file in enumerate(input_files):
 
-        command = "/bin/bash -c \"cat {}\"".format(input_file.file_path)
+        #command = "/bin/bash -c \"cat {}\"".format(input_file.file_path)
+        command = "/bin/bash -c \"python3 --version && git clone https://github.com/implodingduck/batch-multi-sum.git && cd batch-multi-sum && python3 run.py -g ./values.csv && cat computed/values.csv\""
         tasks.append(batchmodels.TaskAddParameter(
             id='Task{}'.format(idx),
             command_line=command,
